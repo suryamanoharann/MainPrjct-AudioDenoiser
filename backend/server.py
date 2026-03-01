@@ -7,31 +7,38 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from torchaudio.models import HDemucs
 
-# Configure Flask to serve your 'frontend' folder automatically
-app = Flask(__name__, static_folder='frontend', static_url_path='')
-CORS(app)
+# --- Smart Path Resolution ---
+# Gets the directory where server.py is located (backend/)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Gets the root directory (MainPrjct-AudioDenoiser/)
+ROOT_DIR = os.path.dirname(BASE_DIR)
 
-# --- Configuration & Folders ---
-UPLOAD_FOLDER = 'uploads'
-STEMS_FOLDER = 'stems' # We'll keep generated audio outside the frontend folder
+FRONTEND_FOLDER = os.path.join(ROOT_DIR, 'frontend')
+UPLOAD_FOLDER = os.path.join(ROOT_DIR, 'uploads')
+STEMS_FOLDER = os.path.join(ROOT_DIR, 'stems')
+MODEL_PATH = os.path.join(ROOT_DIR, 'MAINPRJCT_21epoch.pth') # Place your .pth in the root folder
+
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(STEMS_FOLDER, exist_ok=True)
 
+# Configure Flask to serve your 'frontend' folder automatically
+app = Flask(__name__, static_folder=FRONTEND_FOLDER, static_url_path='')
+CORS(app)
+
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 STEMS = ['Speech', 'Music', 'Impacts', 'Alerts', 'Environmental', 'Mechanical']
-MODEL_PATH = "MAINPRJCT_21epoch.pth"
 
-# --- Initialize 6-Stem HDemucs Model ---
+# --- Initialize Your 6-Stem HDemucs Model ---
 print(f"Loading HDemucs Model on {DEVICE}...")
 model = HDemucs(sources=STEMS, audio_channels=2)
 
 if os.path.exists(MODEL_PATH):
-    # Matches training loop: model.module.state_dict() saved as 'model'
+    # Matches your training loop: model.module.state_dict() saved as 'model'
     checkpoint = torch.load(MODEL_PATH, map_location=DEVICE)
     model.load_state_dict(checkpoint['model'])
     print("✅ Model loaded successfully.")
 else:
-    print(f"⚠️ WARNING: {MODEL_PATH} not found. Using untrained weights.")
+    print(f"⚠️ WARNING: {MODEL_PATH} not found in root. Using untrained weights.")
 
 model = model.to(DEVICE)
 model.eval()
