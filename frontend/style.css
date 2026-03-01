@@ -1,0 +1,143 @@
+:root {
+    --bg-dark: #121212;
+    --panel-bg: #1e1e1e;
+    --accent: #00ff88;
+    --text-main: #ffffff;
+    --text-muted: #888888;
+}
+
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.hidden { display: none !important; }
+
+.app-container {
+    width: 90%;
+    max-width: 1000px;
+    background: var(--panel-bg);
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+/* Upload Zone */
+#upload-zone {
+    text-align: center;
+    padding: 60px;
+    border: 2px dashed var(--text-muted);
+    border-radius: 8px;
+    transition: 0.3s;
+}
+
+#upload-zone.dragover {
+    border-color: var(--accent);
+    background-color: rgba(0, 255, 136, 0.05);
+}
+
+/* Mixer Layout */
+.mixer-layout {
+    display: flex;
+    gap: 30px;
+    margin-top: 20px;
+}
+
+#stem-board {
+    display: flex;
+    gap: 20px;
+    flex-grow: 1;
+    justify-content: space-around;
+    padding-right: 30px;
+    border-right: 1px solid #333;
+}
+
+.stem-channel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+.stem-channel h4 { margin: 0; font-size: 14px; color: var(--text-muted); }
+
+/* Vertical Sliders */
+input[type=range].vertical-slider {
+    -webkit-appearance: slider-vertical;
+    width: 8px;
+    height: 150px;
+    background: #333;
+    outline: none;
+    border-radius: 4px;
+}
+
+input[type=range].vertical-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 24px;
+    height: 12px;
+    background: var(--accent);
+    border-radius: 2px;
+    cursor: pointer;
+}
+
+/* Rotary Dial */
+.master-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 120px;
+}
+
+.dial-container {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: #2a2a2a;
+    position: relative;
+    cursor: ns-resize;
+    box-shadow: inset 0 2px 5px rgba(0,0,0,0.5), 0 2px 5px rgba(255,255,255,0.05);
+    margin: 15px 0;
+}
+
+.dial {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    position: absolute;
+    transform: rotate(0deg);
+}
+
+.dial-indicator {
+    width: 6px;
+    height: 20px;
+    background: var(--accent);
+    margin: 4px auto 0;
+    border-radius: 3px;
+}
+
+/* Playback Footer */
+#playback-controller {
+    margin-top: 30px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #333;
+}
+
+#play-pause-btn {
+    padding: 8px 24px;
+    background: var(--text-main);
+    color: #121212;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
