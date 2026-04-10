@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SonicSplit — 4-Stem Neural Separator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:        #060608;
+  --surface:   #0d0d12;
+  --panel:     #13131a;
+  --panel2:    #1a1a24;
+  --border:    #1f1f2e;
+  --border2:   #2a2a40;
+  --accent:    #00f5c8;
+  --accent-dim:#00f5c822;
+  --accent2:   #ff6b35;
+  --accent3:   #a78bfa;
+  --muted:     #3a3a55;
+  --text:      #e8e8f4;
+  --sub:       #6b6b90;
+  --danger:    #ff4466;
+  --track-h:   4px;
+  --radius:    14px;
+  --radius-sm: 8px;
+
+  --c-speech:  #38bdf8;
+  --c-music:   #c084fc;
+  --c-impacts: #fb923c;
+  --c-noise:   #4ade80;
+
+  --glow-speech:  0 0 20px #38bdf830;
+  --glow-music:   0 0 20px #c084fc30;
+  --glow-impacts: 0 0 20px #fb923c30;
+  --glow-noise:   0 0 20px #4ade8030;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── ANIMATED BACKGROUND ─────────────────────────────────────────────── */
+.bg-canvas {
+  position: fixed; inset: 0;
+  pointer-events: none; z-index: 0;
+  overflow: hidden;
+}
+.bg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.07;
+  animation: orbFloat linear infinite;
+}
+.bg-orb:nth-child(1) {
+  width: 600px; height: 600px;
+  background: var(--accent);
+  top: -200px; left: -200px;
+  animation-duration: 25s;
+}
+.bg-orb:nth-child(2) {
+  width: 400px; height: 400px;
+  background: var(--accent3);
+  bottom: 10%; right: -150px;
+  animation-duration: 32s;
+  animation-delay: -10s;
+}
+.bg-orb:nth-child(3) {
+  width: 300px; height: 300px;
+  background: var(--c-impacts);
+  bottom: 30%; left: 10%;
+  animation-duration: 40s;
+  animation-delay: -20s;
+  opacity: 0.04;
+}
+@keyframes orbFloat {
+  0%,100% { transform: translate(0,0) scale(1); }
+  33%      { transform: translate(40px,-30px) scale(1.05); }
+  66%      { transform: translate(-20px,40px) scale(0.95); }
+}
+
+/* Subtle grid lines */
+.bg-grid {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* Noise grain */
+body::after {
+  content: '';
+  position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  opacity: 0.25;
+}
+
+/* ── HEADER ──────────────────────────────────────────────────────────── */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 36px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(6,6,8,0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  position: sticky; top: 0; z-index: 100;
+}
+.logo {
+  display: flex; align-items: center; gap: 12px;
+}
+.logo-icon {
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, var(--accent), var(--accent3));
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.9rem;
+  box-shadow: 0 0 16px rgba(0,245,200,0.3);
+  flex-shrink: 0;
+}
+.logo-text {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.05rem; font-weight: 800; letter-spacing: -0.03em;
+  color: var(--text);
+}
+.logo-text span { color: var(--accent); }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.header-pill {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem; letter-spacing: 0.12em;
+  padding: 5px 12px; border-radius: 100px;
+  border: 1px solid var(--border2);
+  color: var(--sub); background: var(--panel);
+  text-transform: uppercase;
+}
+.header-pill.live {
+  border-color: rgba(0,245,200,0.3);
+  color: var(--accent);
+  background: var(--accent-dim);
+  position: relative;
+}
+.header-pill.live::before {
+  content: '';
+  display: inline-block; width: 5px; height: 5px;
+  background: var(--accent); border-radius: 50%;
+  margin-right: 7px;
+  box-shadow: 0 0 6px var(--accent);
+  animation: livePulse 1.5s ease-in-out infinite;
+}
+@keyframes livePulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* ── MAIN ────────────────────────────────────────────────────────────── */
+main {
+  max-width: 880px; margin: 0 auto;
+  padding: 48px 24px 100px;
+  position: relative; z-index: 1;
+}
+
+/* ── HERO TITLE ──────────────────────────────────────────────────────── */
+.hero {
+  text-align: center;
+  margin-bottom: 40px;
+  animation: fadeUp 0.6s ease both;
+}
+.hero-title {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(1.8rem, 5vw, 3rem);
+  font-weight: 800; letter-spacing: -0.04em;
+  line-height: 1.1;
+  background: linear-gradient(135deg, var(--text) 0%, var(--sub) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 12px;
+}
+.hero-title span {
+  background: linear-gradient(90deg, var(--accent), var(--accent3));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero-sub {
+  font-size: 0.9rem; color: var(--sub); max-width: 420px; margin: 0 auto;
+  line-height: 1.6;
+}
+.hero-tags {
+  display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+  margin-top: 20px;
+}
+.hero-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem; letter-spacing: 0.1em;
+  padding: 4px 10px; border-radius: 100px;
+  border: 1px solid var(--border2);
+  color: var(--sub); background: var(--panel);
+}
+.hero-tag.hl { border-color: rgba(0,245,200,0.25); color: var(--accent); background: var(--accent-dim); }
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(16px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+/* ── UPLOAD ZONE ─────────────────────────────────────────────────────── */
+#upload-zone {
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  padding: 60px 32px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  background: var(--surface);
+  margin-bottom: 28px;
+  overflow: hidden;
+  animation: fadeUp 0.6s ease 0.1s both;
+}
+#upload-zone::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(0,245,200,0.05) 0%, transparent 70%);
+  pointer-events: none;
+}
+#upload-zone:hover, #upload-zone.drag-over {
+  border-color: rgba(0,245,200,0.5);
+  background: rgba(0,245,200,0.02);
+  box-shadow: 0 0 60px rgba(0,245,200,0.08), inset 0 1px 0 rgba(0,245,200,0.1);
+  transform: translateY(-2px);
+}
+#upload-zone input[type=file] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.upload-icon-wrap {
+  width: 72px; height: 72px;
+  margin: 0 auto 20px;
+  background: var(--panel);
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.8rem;
+  transition: all 0.3s ease;
+  position: relative;
+}
+#upload-zone:hover .upload-icon-wrap {
+  border-color: rgba(0,245,200,0.4);
+  box-shadow: 0 0 30px rgba(0,245,200,0.15);
+  transform: scale(1.05);
+}
+.upload-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.1rem; font-weight: 700;
+  color: var(--text); margin-bottom: 8px;
+}
+.upload-sub {
+  font-size: 0.82rem; color: var(--sub); line-height: 1.5;
+}
+.upload-formats {
+  margin-top: 20px;
+  display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;
+}
+.fmt-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem; letter-spacing: 0.1em;
+  padding: 3px 9px; border-radius: 5px;
+  background: var(--panel2); border: 1px solid var(--border2);
+  color: var(--muted);
+}
+
+/* ── STATUS BAR ──────────────────────────────────────────────────────── */
+#status-bar {
+  display: none;
+  align-items: center; gap: 14px;
+  background: var(--panel);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 28px;
+  animation: fadeUp 0.4s ease both;
+}
+#status-bar.visible { display: flex; }
+
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.status-dot.idle { background: var(--sub); box-shadow: none; animation: none; }
+.status-dot.done { background: #4ade80; box-shadow: 0 0 8px #4ade80; animation: none; }
+.status-dot.err  { background: var(--danger); box-shadow: 0 0 8px var(--danger); animation: none; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.6)} }
+
+#status-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem; color: var(--sub); letter-spacing: 0.02em;
+}
+#progress-bar-wrap {
+  flex: 1; height: 2px; background: var(--border); border-radius: 2px; overflow: hidden;
+}
+#progress-bar {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--accent3));
+  border-radius: 2px;
+  transition: width 0.4s ease;
+  box-shadow: 0 0 8px var(--accent);
+}
+
+/* ── MIXER PANEL ─────────────────────────────────────────────────────── */
+#mixer { display: none; }
+#mixer.visible { display: block; animation: fadeUp 0.5s ease both; }
+
+.mixer-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 24px;
+}
+.file-info { display: flex; align-items: center; gap: 14px; }
+.file-dot {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.file-name {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.73rem; color: var(--text); max-width: 260px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.file-dur {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem; color: var(--sub); margin-top: 3px;
+}
+
+/* ── WAVEFORM ─────────────────────────────────────────────────────────── */
+#waveform-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  padding: 20px 20px 14px;
+  margin-bottom: 20px;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+#waveform-wrap::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(0,245,200,0.03) 0%, transparent 100%);
+  pointer-events: none;
+}
+/* Scanline effect */
+#waveform-wrap::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 3px,
+    rgba(0,0,0,0.06) 3px,
+    rgba(0,0,0,0.06) 4px
+  );
+  pointer-events: none; border-radius: var(--radius);
+}
+#waveform-canvas { width: 100%; height: 64px; display: block; position: relative; z-index: 1; }
+#playhead {
+  position: absolute; top: 20px; bottom: 14px;
+  width: 1px; background: var(--accent);
+  left: 20px;
+  pointer-events: none;
+  box-shadow: 0 0 8px var(--accent), 0 0 20px rgba(0,245,200,0.4);
+  transition: left 0.08s linear;
+  z-index: 2;
+}
+#playhead::before {
+  content: '';
+  position: absolute; top: -4px; left: -4px;
+  width: 9px; height: 9px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--accent);
+}
+.waveform-time {
+  display: flex; justify-content: space-between;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem; color: var(--muted);
+  margin-top: 8px; padding: 0 2px;
+  position: relative; z-index: 1;
+}
+
+/* ── TRANSPORT ────────────────────────────────────────────────────────── */
+.transport {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 32px; flex-wrap: wrap;
+}
+.btn {
+  display: flex; align-items: center; gap: 7px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem; letter-spacing: 0.06em;
+  padding: 10px 18px; border-radius: var(--radius-sm);
+  cursor: pointer; border: 1px solid var(--border2);
+  background: var(--panel); color: var(--sub);
+  transition: all 0.18s ease; white-space: nowrap;
+  text-transform: uppercase;
+  position: relative; overflow: hidden;
+}
+.btn::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 50%);
+  pointer-events: none;
+}
+.btn:hover {
+  border-color: rgba(0,245,200,0.4); color: var(--accent);
+  background: rgba(0,245,200,0.04);
+  box-shadow: 0 0 20px rgba(0,245,200,0.08);
+  transform: translateY(-1px);
+}
+.btn.primary {
+  background: linear-gradient(135deg, var(--accent), #00d4aa);
+  color: #060608; border-color: var(--accent); font-weight: 700;
+  box-shadow: 0 0 24px rgba(0,245,200,0.25);
+}
+.btn.primary:hover {
+  box-shadow: 0 0 40px rgba(0,245,200,0.4);
+  transform: translateY(-2px);
+}
+.btn.active-play {
+  border-color: var(--accent2); color: var(--accent2);
+  box-shadow: 0 0 20px rgba(255,107,53,0.15);
+}
+.btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+.sep-line { width: 1px; height: 30px; background: var(--border2); }
+
+/* ── STEMS SECTION ───────────────────────────────────────────────────── */
+.stems-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem; letter-spacing: 0.15em;
+  color: var(--muted); text-transform: uppercase;
+  margin-bottom: 14px;
+  display: flex; align-items: center; gap: 10px;
+}
+.stems-label::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+
+#stems-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+@media(max-width:560px){ #stems-grid { grid-template-columns: 1fr; } }
+
+/* ── STEM CARD ───────────────────────────────────────────────────────── */
+.stem-card {
+  background: var(--panel);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  padding: 18px 18px 16px;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, opacity 0.3s ease;
+  position: relative; overflow: hidden;
+}
+/* Top color bar */
+.stem-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, var(--stem-color), transparent);
+}
+/* Glow corner */
+.stem-card::after {
+  content: '';
+  position: absolute; top: -30px; right: -30px;
+  width: 80px; height: 80px;
+  background: radial-gradient(circle, var(--stem-color) 0%, transparent 70%);
+  opacity: 0.07; pointer-events: none;
+  border-radius: 50%;
+}
+.stem-card:hover {
+  border-color: color-mix(in srgb, var(--stem-color) 40%, var(--border2));
+  box-shadow: var(--stem-glow);
+}
+.stem-card.muted { opacity: 0.35; }
+
+/* ── VU METER BARS (decorative, CSS animated) ────────────────────────── */
+.vu-meter {
+  display: flex; align-items: flex-end; gap: 2px;
+  height: 20px; margin-bottom: 14px;
+}
+.vu-bar {
+  flex: 1; background: var(--stem-color);
+  border-radius: 2px 2px 0 0; opacity: 0.5;
+  animation: vuAnim var(--vu-dur, 0.8s) ease-in-out infinite alternate;
+  animation-delay: var(--vu-delay, 0s);
+  transform-origin: bottom;
+}
+@keyframes vuAnim {
+  from { transform: scaleY(var(--vu-min, 0.2)); opacity: 0.3; }
+  to   { transform: scaleY(var(--vu-max, 1.0)); opacity: 0.7; }
+}
+.stem-card.muted .vu-bar { animation-play-state: paused; transform: scaleY(0.1); opacity: 0.1; }
+
+.stem-top {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+.stem-name-row { display: flex; align-items: center; gap: 8px; }
+.stem-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--stem-color);
+  box-shadow: 0 0 8px var(--stem-color);
+  flex-shrink: 0;
+}
+.stem-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em;
+  color: var(--text);
+}
+.stem-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.52rem; letter-spacing: 0.08em;
+  padding: 2px 7px; border-radius: 100px;
+  border: 1px solid;
+  margin-left: 4px;
+}
+.stem-badge.dsp {
+  color: var(--c-impacts);
+  border-color: rgba(251,146,60,0.35);
+  background: rgba(251,146,60,0.08);
+}
+.stem-badge.ml {
+  color: var(--accent);
+  border-color: rgba(0,245,200,0.25);
+  background: rgba(0,245,200,0.06);
+}
+
+.stem-right { display: flex; align-items: center; gap: 8px; }
+.stem-vol {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem; color: var(--stem-color);
+  min-width: 34px; text-align: right;
+}
+.mute-btn {
+  width: 26px; height: 26px; border-radius: 7px;
+  border: 1px solid var(--border2);
+  background: transparent; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; color: var(--sub);
+}
+.mute-btn:hover { border-color: var(--stem-color); color: var(--stem-color); }
+.mute-btn.is-muted { background: var(--panel2); border-color: var(--muted); color: var(--muted); }
+.mute-btn svg { width: 11px; height: 11px; }
+
+/* ── CUSTOM SLIDER ───────────────────────────────────────────────────── */
+.slider-wrap {
+  position: relative; height: 18px; display: flex; align-items: center;
+  margin-bottom: 10px;
+}
+input[type=range] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: var(--track-h);
+  border-radius: 100px;
+  background: var(--border2);
+  outline: none; cursor: pointer;
+  position: relative; z-index: 1;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--stem-color);
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 10px var(--stem-color);
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+input[type=range]::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+  box-shadow: 0 0 18px var(--stem-color);
+}
+input[type=range]::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--stem-color);
+  border: 2px solid var(--bg);
+  cursor: pointer;
+}
+.slider-fill {
+  position: absolute; left: 0; height: var(--track-h);
+  background: var(--stem-color); border-radius: 100px;
+  opacity: 0.3; pointer-events: none;
+}
+
+/* ── STEM ENERGY BAR ──────────────────────────────────────────────────── */
+.stem-energy {
+  height: 2px; border-radius: 1px;
+  background: var(--border);
+  overflow: hidden;
+}
+.stem-energy-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--stem-color), color-mix(in srgb, var(--stem-color) 60%, white));
+  border-radius: 1px; opacity: 0.5;
+  transition: width 0.6s ease;
+}
+
+/* ── MASTER ───────────────────────────────────────────────────────────── */
+.master-section {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  padding: 18px 22px;
+  display: flex; align-items: center; gap: 18px;
+  position: relative; overflow: hidden;
+}
+.master-section::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(0,245,200,0.03) 0%, transparent 60%);
+  pointer-events: none;
+}
+.master-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem; letter-spacing: 0.15em;
+  color: var(--muted); text-transform: uppercase;
+  white-space: nowrap; min-width: 60px;
+}
+#master-slider {
+  flex: 1;
+  --stem-color: var(--accent);
+  --track-h: 4px;
+}
+#master-vol-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.68rem; color: var(--accent);
+  min-width: 36px; text-align: right;
+}
+
+/* ── DSP INFO BOX ─────────────────────────────────────────────────────── */
+#dsp-info-box {
+  display: none;
+  margin-top: 12px; margin-bottom: 0;
+  background: rgba(251,146,60,0.06);
+  border: 1px solid rgba(251,146,60,0.2);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem; color: rgba(251,146,60,0.8);
+  display: none; align-items: center; gap: 8px;
+}
+#dsp-info-box.visible { display: flex; }
+#dsp-info-box svg { flex-shrink: 0; }
+
+/* ── RESET ────────────────────────────────────────────────────────────── */
+.reset-link {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem; color: var(--muted);
+  cursor: pointer; margin-top: 24px;
+  text-decoration: none; transition: color 0.15s;
+  border: none; background: none; letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.reset-link:hover { color: var(--sub); }
+
+/* ── TOAST ────────────────────────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 32px; left: 50%;
+  transform: translateX(-50%) translateY(16px);
+  background: var(--panel2);
+  border: 1px solid var(--border2);
+  border-radius: 10px; padding: 11px 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem; color: var(--text);
+  opacity: 0; pointer-events: none;
+  transition: all 0.25s cubic-bezier(0.34,1.56,0.64,1);
+  white-space: nowrap; z-index: 10000;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── SCROLLBAR ────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="bg-canvas">
+  <div class="bg-orb"></div>
+  <div class="bg-orb"></div>
+  <div class="bg-orb"></div>
+</div>
+<div class="bg-grid"></div>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">!</div>
+    <div class="logo-text">Audio<span>Denoiser</span></div>
+  </div>
+  <div class="header-right">
+    <div class="header-pill">4-STEM ENGINE</div>
+    <div class="header-pill live">NEURAL · DSP</div>
+  </div>
+</header>
+
+<main>
+
+  <div class="hero">
+    <div class="hero-title">Extract <span>clean audio</span><br>from noise</div>
+    <div class="hero-sub">Upload an audio file and instantly isolate clean speech and environmental noise sources</div>
+    <div class="hero-tags">
+      <span class="hero-tag hl">ML Model</span>
+      <span class="hero-tag hl">DSP Transient</span>
+      <span class="hero-tag">HDemucs</span>
+      <span class="hero-tag">16kHz</span>
+      <span class="hero-tag">Stereo</span>
+    </div>
+  </div>
+
+  <div id="upload-zone">
+    <input type="file" id="file-input" accept=".mp3,.wav,.flac,.ogg,.m4a">
+    <div class="upload-icon-wrap">⬡</div>
+    <div class="upload-title">Drop audio or click to browse</div>
+    <div class="upload-sub">Your file is sent to the model for stem separation.<br>Processing happens server-side on GPU.</div>
+    <div class="upload-formats">
+      <span class="fmt-tag">WAV</span><span class="fmt-tag">MP3</span>
+      <span class="fmt-tag">FLAC</span><span class="fmt-tag">OGG</span><span class="fmt-tag">M4A</span>
+    </div>
+  </div>
+
+  <div id="status-bar">
+    <div id="status-dot" class="status-dot idle"></div>
+    <span id="status-text">Ready</span>
+    <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+  </div>
+
+  <div id="mixer">
+
+    <div class="mixer-header">
+      <div class="file-info">
+        <div class="file-dot">♪</div>
+        <div>
+          <div class="file-name" id="file-label">—</div>
+          <div class="file-dur" id="file-dur">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="waveform-wrap">
+      <canvas id="waveform-canvas"></canvas>
+      <div id="playhead"></div>
+      <div class="waveform-time">
+        <span id="cur-time">0:00</span>
+        <span id="tot-time">0:00</span>
+      </div>
+    </div>
+
+    <div class="transport">
+      <button class="btn primary" id="play-mix-btn" onclick="toggleMix()">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        PLAY MIX
+      </button>
+      <button class="btn" id="play-orig-btn" onclick="toggleOriginal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4V8z"/></svg>
+        ORIGINAL
+      </button>
+      <div class="sep-line"></div>
+      <button class="btn" onclick="resetSliders()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        RESET
+      </button>
+      <button class="btn" id="dl-btn" onclick="downloadMix()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        DOWNLOAD
+      </button>
+    </div>
+
+    <div class="stems-label">ACTIVE STEMS</div>
+    <div id="stems-grid"></div>
+
+    <div class="master-section">
+      <div class="master-label">MASTER</div>
+      <input type="range" id="master-slider" min="0" max="200" value="100"
+             oninput="setMaster(this.value)" style="--stem-color:var(--accent); --track-h:4px;">
+      <div id="master-vol-val">100%</div>
+    </div>
+
+    <!-- DSP info shown after separation -->
+    <div id="dsp-info-box">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+      </svg>
+      <span id="dsp-info-text">Impacts extracted via DSP transient detector — speech-plosive protected.</span>
+    </div>
+
+    <button class="reset-link" onclick="resetAll()">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+      Separate another file
+    </button>
+
+  </div><!-- end #mixer -->
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+// ─── STEM CONFIG ──────────────────────────────────────────────────────────────
+const STEM_META = {
+  speech:  { label: 'Speech',  color: '#38bdf8', glow: '0 0 24px rgba(56,189,248,0.2)',  icon: '🗣',  method: 'ml'  },
+  music:   { label: 'Music',   color: '#c084fc', glow: '0 0 24px rgba(192,132,252,0.2)', icon: '🎵', method: 'ml'  },
+  impacts: { label: 'Impacts', color: '#fb923c', glow: '0 0 24px rgba(251,146,60,0.2)',  icon: '💥', method: 'dsp' },
+  noise:   { label: 'Noise',   color: '#4ade80', glow: '0 0 24px rgba(74,222,128,0.2)',  icon: '🌫️', method: 'ml'  },
+};
+const PRESENCE_THRESHOLD = 0.003;
+
+// VU meter profiles per stem — [minScale, maxScale, duration, bars]
+const VU_PROFILES = {
+  speech:  { bars: 8,  minScale: [0.3,0.1,0.4,0.2,0.5,0.1,0.3,0.2], maxScale: [0.9,0.7,1.0,0.8,1.0,0.6,0.85,0.7], dur: [0.7,0.9,0.6,1.1,0.8,1.0,0.7,0.95] },
+  music:   { bars: 10, minScale: [0.2,0.4,0.1,0.6,0.3,0.5,0.2,0.4,0.1,0.3], maxScale: [0.7,0.9,0.5,1.0,0.8,0.95,0.6,0.85,0.4,0.75], dur: [1.0,0.8,1.2,0.7,0.9,0.8,1.1,0.75,1.0,0.85] },
+  impacts: { bars: 7,  minScale: [0.1,0.3,0.1,0.5,0.1,0.3,0.1], maxScale: [0.8,1.0,0.7,1.0,0.6,0.9,0.5], dur: [0.4,0.35,0.5,0.3,0.45,0.38,0.5] },
+  noise:   { bars: 9,  minScale: [0.5,0.4,0.6,0.3,0.5,0.4,0.6,0.3,0.5], maxScale: [0.8,0.7,0.9,0.6,0.8,0.75,0.85,0.65,0.8], dur: [1.2,1.0,0.9,1.3,1.1,0.95,1.0,1.2,0.85] },
+};
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let audioCtx      = null;
+let stemBuffers   = {};
+let origBuffer    = null;
+let gainNodes     = {};
+let masterGain    = null;
+let activeSources = [];
+let isPlaying     = false;
+let isMixMode     = true;
+let playStart     = 0;
+let playOffset    = 0;
+let rafId         = null;
+let stemPresent   = {};
+let stemMuted     = {};
+let stemGainVal   = {};
+
+// ─── DRAG & DROP ──────────────────────────────────────────────────────────────
+const zone = document.getElementById('upload-zone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => {
+  e.preventDefault(); zone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
+document.getElementById('file-input').addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+// ─── FILE HANDLER ─────────────────────────────────────────────────────────────
+function handleFile(file) {
+  const allowed = ['audio/mpeg','audio/wav','audio/flac','audio/ogg','audio/x-m4a','audio/mp4'];
+  if (!allowed.some(t => file.type.startsWith('audio')) && !file.name.match(/\.(mp3|wav|flac|ogg|m4a)$/i)) {
+    showToast('⚠ Unsupported file type'); return;
+  }
+  document.getElementById('file-label').textContent = file.name;
+  setStatus('processing', 'Uploading and separating stems…');
+  setProgress(10);
+  showMixer(false);
+
+  const fd = new FormData();
+  fd.append('audio', file);
+
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/separate');
+  xhr.upload.onprogress = e => {
+    if (e.lengthComputable) setProgress(10 + (e.loaded / e.total) * 30);
+  };
+  xhr.onload = () => {
+    if (xhr.status === 200) {
+      const data = JSON.parse(xhr.responseText);
+      setProgress(60);
+      setStatus('processing', 'Decoding audio buffers…');
+      // Show DSP info if available
+      if (data.dsp_info) {
+        const box = document.getElementById('dsp-info-box');
+        const txt = document.getElementById('dsp-info-text');
+        const ev  = data.dsp_info.impact_events_detected;
+        const pct = data.dsp_info.impact_coverage_pct;
+        txt.textContent = `Impacts via DSP transient detector — ${ev} event(s) detected (${pct}% of audio). Speech-plosive protected.`;
+        box.classList.add('visible');
+      }
+      loadStems(data.stems, data.original);
+    } else {
+      let msg = 'Separation failed';
+      try { msg = JSON.parse(xhr.responseText).error || msg; } catch(e) {}
+      setStatus('error', msg);
+    }
+  };
+  xhr.onerror = () => setStatus('error', 'Network error — is the server running?');
+  xhr.send(fd);
+}
+
+// ─── LOAD STEMS ───────────────────────────────────────────────────────────────
+async function loadStems(stemUrls, origUrl) {
+  audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = audioCtx.createGain();
+  masterGain.connect(audioCtx.destination);
+
+  const keys = Object.keys(stemUrls);
+  let loaded = 0;
+
+  const origResp = await fetch(origUrl);
+  const origAb   = await origResp.arrayBuffer();
+  origBuffer     = await audioCtx.decodeAudioData(origAb);
+
+  for (const [name, url] of Object.entries(stemUrls)) {
+    const resp = await fetch(url);
+    const ab   = await resp.arrayBuffer();
+    const buf  = await audioCtx.decodeAudioData(ab);
+    stemBuffers[name] = buf;
+
+    const ch = buf.getChannelData(0);
+    let sum = 0;
+    for (let i = 0; i < ch.length; i++) sum += ch[i] * ch[i];
+    const rms = Math.sqrt(sum / ch.length);
+    stemPresent[name] = rms > PRESENCE_THRESHOLD;
+    stemGainVal[name] = 1.0;
+    stemMuted[name]   = false;
+
+    gainNodes[name] = audioCtx.createGain();
+    gainNodes[name].connect(masterGain);
+
+    loaded++;
+    setProgress(60 + (loaded / keys.length) * 38);
+  }
+
+  setProgress(100);
+  setStatus('done', `${Object.values(stemPresent).filter(Boolean).length} active stems — separation complete`);
+  buildUI();
+  drawWaveform(origBuffer);
+  document.getElementById('file-dur').textContent = formatTime(origBuffer.duration);
+  document.getElementById('tot-time').textContent  = formatTime(origBuffer.duration);
+  showMixer(true);
+}
+
+// ─── BUILD STEM CARDS ─────────────────────────────────────────────────────────
+function buildUI() {
+  const grid = document.getElementById('stems-grid');
+  grid.innerHTML = '';
+
+  for (const [name, meta] of Object.entries(STEM_META)) {
+    if (!stemBuffers[name]) continue;
+    if (!stemPresent[name]) continue;
+
+    const energy  = getStemEnergy(name);
+    const pct     = Math.round(energy * 100);
+    const vu      = VU_PROFILES[name] || VU_PROFILES.noise;
+    const isDSP   = meta.method === 'dsp';
+
+    // Build VU bars HTML
+    let vuHtml = '';
+    for (let b = 0; b < vu.bars; b++) {
+      const minS  = vu.minScale[b] || 0.2;
+      const maxS  = vu.maxScale[b] || 0.8;
+      const dur   = vu.dur[b]      || 0.8;
+      const delay = (b * 0.07).toFixed(2);
+      vuHtml += `<div class="vu-bar" style="
+        --vu-min:${minS};
+        --vu-max:${maxS};
+        --vu-dur:${dur}s;
+        --vu-delay:${delay}s;
+        animation-delay:${delay}s;
+      "></div>`;
+    }
+
+    const methodBadge = isDSP
+      ? `<span class="stem-badge dsp">DSP</span>`
+      : `<span class="stem-badge ml">ML</span>`;
+
+    const card = document.createElement('div');
+    card.className = 'stem-card';
+    card.id        = `card-${name}`;
+    card.style.setProperty('--stem-color', meta.color);
+    card.style.setProperty('--stem-glow',  meta.glow);
+    card.innerHTML = `
+      <div class="vu-meter">${vuHtml}</div>
+      <div class="stem-top">
+        <div class="stem-name-row">
+          <div class="stem-dot"></div>
+          <div class="stem-name">${meta.label.toUpperCase()}</div>
+          ${methodBadge}
+        </div>
+        <div class="stem-right">
+          <div class="stem-vol" id="vol-${name}">100%</div>
+          <button class="mute-btn" id="mute-${name}" title="Mute" onclick="toggleMute('${name}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="slider-wrap">
+        <div class="slider-fill" id="fill-${name}" style="width:100%"></div>
+        <input type="range" id="slider-${name}" min="0" max="100" value="100"
+               style="--stem-color:${meta.color}; --track-h:4px;"
+               oninput="setStemGain('${name}', this.value)">
+      </div>
+      <div class="stem-energy">
+        <div class="stem-energy-bar" style="width:${pct}%"></div>
+      </div>
+    `;
+    grid.appendChild(card);
+  }
+}
+
+// ─── GAIN CONTROL ─────────────────────────────────────────────────────────────
+function setStemGain(name, val) {
+  const v = val / 100;
+  stemGainVal[name] = v;
+  if (gainNodes[name]) gainNodes[name].gain.value = stemMuted[name] ? 0 : v;
+  document.getElementById(`vol-${name}`).textContent = `${Math.round(v * 100)}%`;
+  document.getElementById(`fill-${name}`).style.width = `${val}%`;
+}
+
+function toggleMute(name) {
+  stemMuted[name] = !stemMuted[name];
+  const btn  = document.getElementById(`mute-${name}`);
+  const card = document.getElementById(`card-${name}`);
+  btn.classList.toggle('is-muted', stemMuted[name]);
+  card.classList.toggle('muted', stemMuted[name]);
+  if (gainNodes[name]) gainNodes[name].gain.value = stemMuted[name] ? 0 : stemGainVal[name];
+}
+
+function setMaster(val) {
+  if (masterGain) masterGain.gain.value = val / 100;
+  document.getElementById('master-vol-val').textContent = `${val}%`;
+}
+
+function resetSliders() {
+  for (const name of Object.keys(stemBuffers)) {
+    if (!stemPresent[name]) continue;
+    const sl = document.getElementById(`slider-${name}`);
+    if (!sl) continue;
+    sl.value = 100;
+    setStemGain(name, 100);
+    if (stemMuted[name]) toggleMute(name);
+  }
+  document.getElementById('master-slider').value = 100;
+  setMaster(100);
+  showToast('Sliders reset');
+}
+
+// ─── PLAYBACK ─────────────────────────────────────────────────────────────────
+function stopAll() {
+  activeSources.forEach(s => { try { s.stop(); } catch(e){} });
+  activeSources = [];
+  isPlaying     = false;
+  cancelAnimationFrame(rafId);
+}
+
+function toggleMix() {
+  if (isPlaying && isMixMode) { stopAll(); updatePlayBtn(); return; }
+  if (isPlaying) stopAll();
+  isMixMode = true;
+  playMix();
+}
+
+function toggleOriginal() {
+  if (isPlaying && !isMixMode) { stopAll(); updatePlayBtn(); return; }
+  if (isPlaying) stopAll();
+  isMixMode = false;
+  playOriginal();
+}
+
+function playMix() {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const dur = Object.values(stemBuffers)[0]?.duration || 0;
+  for (const [name, buf] of Object.entries(stemBuffers)) {
+    if (!stemPresent[name]) continue;
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(gainNodes[name]);
+    src.start(0, playOffset);
+    src.onended = () => { if (src._last) { stopAll(); updatePlayBtn(); } };
+    src._last = (name === Object.keys(stemBuffers).at(-1));
+    activeSources.push(src);
+  }
+  playStart = audioCtx.currentTime - playOffset;
+  isPlaying = true;
+  updatePlayBtn();
+  tickPlayhead(dur);
+}
+
+function playOriginal() {
+  if (!origBuffer) return;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const src = audioCtx.createBufferSource();
+  src.buffer = origBuffer;
+  src.connect(masterGain);
+  src.start(0, playOffset);
+  src.onended = () => { stopAll(); updatePlayBtn(); };
+  activeSources.push(src);
+  playStart = audioCtx.currentTime - playOffset;
+  isPlaying = true;
+  updatePlayBtn();
+  tickPlayhead(origBuffer.duration);
+}
+
+function tickPlayhead(dur) {
+  const wrap  = document.getElementById('waveform-wrap');
+  const head  = document.getElementById('playhead');
+  const curEl = document.getElementById('cur-time');
+  const cw    = wrap.clientWidth - 40;
+  function tick() {
+    if (!isPlaying) return;
+    const elapsed = audioCtx.currentTime - playStart;
+    const frac    = Math.min(elapsed / dur, 1);
+    head.style.left = (20 + frac * cw) + 'px';
+    curEl.textContent = formatTime(elapsed);
+    if (elapsed < dur) rafId = requestAnimationFrame(tick);
+  }
+  rafId = requestAnimationFrame(tick);
+}
+
+function updatePlayBtn() {
+  const mb = document.getElementById('play-mix-btn');
+  const ob = document.getElementById('play-orig-btn');
+  if (isPlaying && isMixMode) {
+    mb.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> PAUSE MIX`;
+    mb.classList.add('active-play');
+  } else {
+    mb.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> PLAY MIX`;
+    mb.classList.remove('active-play');
+  }
+  if (isPlaying && !isMixMode) {
+    ob.classList.add('active-play');
+    ob.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> PAUSE`;
+  } else {
+    ob.classList.remove('active-play');
+    ob.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4V8z"/></svg> ORIGINAL`;
+  }
+}
+
+// ─── WAVEFORM DRAW ────────────────────────────────────────────────────────────
+function drawWaveform(buf) {
+  const canvas = document.getElementById('waveform-canvas');
+  const dpr    = window.devicePixelRatio || 1;
+  canvas.width  = canvas.offsetWidth  * dpr;
+  canvas.height = canvas.offsetHeight * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = canvas.offsetWidth, H = canvas.offsetHeight;
+  const data = buf.getChannelData(0);
+  const step = Math.ceil(data.length / W);
+  const mid  = H / 2;
+  ctx.clearRect(0, 0, W, H);
+
+  // Gradient fill under waveform
+  const grad = ctx.createLinearGradient(0, 0, W, 0);
+  grad.addColorStop(0,   'rgba(0,245,200,0.12)');
+  grad.addColorStop(0.4, 'rgba(167,139,250,0.18)');
+  grad.addColorStop(1,   'rgba(0,245,200,0.08)');
+
+  for (let x = 0; x < W; x++) {
+    let min = 1, max = -1;
+    for (let j = 0; j < step; j++) {
+      const s = data[x * step + j] || 0;
+      if (s < min) min = s;
+      if (s > max) max = s;
+    }
+    const alpha = 0.2 + (Math.abs(max) + Math.abs(min)) * 0.5;
+    ctx.strokeStyle = `rgba(0,245,200,${Math.min(alpha, 0.9)})`;
+    ctx.lineWidth   = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, mid + min * mid * 0.82);
+    ctx.lineTo(x, mid + max * mid * 0.82);
+    ctx.stroke();
+  }
+}
+
+// ─── DOWNLOAD ─────────────────────────────────────────────────────────────────
+async function downloadMix() {
+  if (!Object.keys(stemBuffers).length) { showToast('No stems loaded'); return; }
+  showToast('⏳ Rendering mix…');
+  const dur    = Object.values(stemBuffers)[0].duration;
+  const sr     = audioCtx.sampleRate;
+  const len    = Math.ceil(dur * sr);
+  const offCtx = new OfflineAudioContext(2, len, sr);
+  const offMaster = offCtx.createGain();
+  offMaster.gain.value = masterGain.gain.value;
+  offMaster.connect(offCtx.destination);
+  for (const [name, buf] of Object.entries(stemBuffers)) {
+    if (!stemPresent[name] || stemMuted[name]) continue;
+    const g = offCtx.createGain(); g.gain.value = stemGainVal[name]; g.connect(offMaster);
+    const src = offCtx.createBufferSource(); src.buffer = buf; src.connect(g); src.start(0);
+  }
+  const rendered = await offCtx.startRendering();
+  const wav = encodeWav(rendered);
+  const blob = new Blob([wav], { type: 'audio/wav' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a'); a.href = url; a.download = 'sonic_mix.wav'; a.click();
+  URL.revokeObjectURL(url);
+  showToast('✓ Download started');
+}
+
+function encodeWav(buf) {
+  const nCh = buf.numberOfChannels, sr = buf.sampleRate, len = buf.length, bpp = 2;
+  const data = new DataView(new ArrayBuffer(44 + len * nCh * bpp));
+  let o = 0;
+  const s  = (v, n) => { for (let i=0;i<n;i++){data.setUint8(o++, v & 0xff); v >>= 8;} };
+  const ws = str => { for (let i=0;i<str.length;i++) data.setUint8(o++, str.charCodeAt(i)); };
+  ws('RIFF'); s(36 + len * nCh * bpp, 4); ws('WAVE');
+  ws('fmt '); s(16,4); s(1,2); s(nCh,2); s(sr,4); s(sr*nCh*bpp,4); s(nCh*bpp,2); s(16,2);
+  ws('data'); s(len * nCh * bpp, 4);
+  for (let i=0;i<len;i++) for (let c=0;c<nCh;c++) {
+    const v = Math.max(-1, Math.min(1, buf.getChannelData(c)[i]));
+    s(v < 0 ? v * 32768 : v * 32767, 2);
+  }
+  return data.buffer;
+}
+
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+function getStemEnergy(name) {
+  const buf = stemBuffers[name]; if (!buf) return 0;
+  const ch = buf.getChannelData(0); let sum = 0;
+  const step = Math.ceil(ch.length / 1000);
+  for (let i = 0; i < ch.length; i += step) sum += ch[i] * ch[i];
+  return Math.min(Math.sqrt(sum / (ch.length / step)) * 8, 1);
+}
+
+function formatTime(s) {
+  const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2,'0')}`;
+}
+
+function setStatus(type, msg) {
+  const bar = document.getElementById('status-bar');
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  bar.classList.add('visible');
+  dot.className = 'status-dot ' + (type === 'processing' ? '' : type);
+  txt.textContent = msg;
+}
+
+function setProgress(pct) {
+  document.getElementById('progress-bar').style.width = pct + '%';
+}
+
+function showMixer(show) {
+  document.getElementById('mixer').classList.toggle('visible', show);
+  document.getElementById('upload-zone').style.display = show ? 'none' : '';
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._tid);
+  t._tid = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+function resetAll() {
+  stopAll();
+  stemBuffers = {}; gainNodes = {}; stemPresent = {};
+  stemMuted = {}; stemGainVal = {}; origBuffer = null;
+  showMixer(false);
+  setStatus('idle', 'Ready');
+  setProgress(0);
+  document.getElementById('status-bar').classList.remove('visible');
+  document.getElementById('file-input').value = '';
+  document.getElementById('dsp-info-box').classList.remove('visible');
+  document.getElementById('stems-grid').innerHTML = '';
+}
+
+// Waveform seek
+document.getElementById('waveform-wrap').addEventListener('click', function(e) {
+  if (!origBuffer) return;
+  const rect = this.getBoundingClientRect();
+  const frac = (e.clientX - rect.left - 20) / (rect.width - 40);
+  playOffset = Math.max(0, Math.min(1, frac)) * origBuffer.duration;
+  if (isPlaying) {
+    const wasOrig = !isMixMode; stopAll();
+    if (wasOrig) playOriginal(); else playMix();
+  }
+});
+</script>
+</body>
+</html>
