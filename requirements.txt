@@ -1,0 +1,9 @@
+torch>=2.1.0
+torchaudio>=2.1.0
+numpy>=1.23.0
+Flask>=2.3.0
+flask-cors>=4.0.0
+kaggle>=1.5.16
+tqdm>=4.66.0
+soundfile>=0.12.1
+gunicorn>=21.2.0
